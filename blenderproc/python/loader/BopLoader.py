@@ -26,6 +26,7 @@ def convert_glb_to_obj(glb_path: str, norm_scale: Optional[float]):
     if isinstance(trimesh_mesh, trimesh.Scene):
         for name, geom in trimesh_mesh.geometry.items():
             if not isinstance(geom, trimesh.Trimesh):
+                print(f"Skipping {glb_path} as it is not a valid Trimesh")
                 return None
         merged_mesh = trimesh.util.concatenate(trimesh_mesh.dump())
     else:
@@ -82,6 +83,7 @@ def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, obje
 
         obj_path = glb_path.replace('.glb', '.obj')
         if os.path.exists(obj_path) and norm_scale is None:
+            print("simon here 1")
             continue
         if not os.path.exists(obj_path):
             norm_scale = convert_glb_to_obj(glb_path, norm_scale)
@@ -89,6 +91,7 @@ def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, obje
                 print(f"{glb_path} could not be converted to .obj")
                 continue
             else:
+                print("simon here")
                 objects_dict[obj_id]["norm_scale"] = norm_scale
         model_p = {}
         model_p["model_tpath"] = obj_path
@@ -438,8 +441,8 @@ class _BopLoader:
         duplicated = model_path in _BopLoader.CACHED_OBJECTS
         objs = load_obj(model_path, cached_objects=_BopLoader.CACHED_OBJECTS)
         # Bop objects comes with incorrect custom normals, so remove them
-        for obj in objs:
-            obj.clear_custom_splitnormals()
+        # for obj in objs:
+        #     obj.clear_custom_splitnormals()
             
         # assert (
         #     len(objs) == 1
@@ -453,7 +456,8 @@ class _BopLoader:
                 cur_obj.set_material(i, material_dup)
 
         # Change Material name to be backward compatible
-        cur_obj.get_materials()[-1].set_name("bop_" + bop_dataset_name + "_vertex_col_material")
+        if len(cur_obj.get_materials()) > 0:
+            cur_obj.get_materials()[-1].set_name("bop_" + bop_dataset_name + "_vertex_col_material")
         cur_obj.set_scale(Vector((scale, scale, scale)))
         cur_obj.set_cp("category_id", obj_id)
         cur_obj.set_cp("model_path", model_path)

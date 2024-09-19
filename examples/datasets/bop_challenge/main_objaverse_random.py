@@ -16,12 +16,12 @@ parser.add_argument('--num_scenes', nargs='?', type=int, default=10, help="How m
 args = parser.parse_args()
 
 args.bop_parent_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/NOM-Diffusion/dataset'
-args.cc_textures_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProc/textures'
-args.output_dir = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProc/objaverse_scenes'
+args.cc_textures_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/textures'
+args.output_dir = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/objaverse_scenes'
 args.num_scenes = 2
-sample_size = 15
-total_num_objects = 100
-objaverse_model_json_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProc/meshes/objaverse_models.json'
+sample_size = 5
+total_num_objects = 8
+objaverse_model_json_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/meshes/objaverse_models.json'
 objaverse_base_path = '/Users/simonschlapfer/.objaverse/hf-objaverse-v1/glbs'
 dataset_name = 'objapose'
 image_resolution = (720, 540)
@@ -126,14 +126,15 @@ for i in range(args.num_scenes):
 
 
     # Randomize materials and set physics
-    for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):        
-        mat = obj.get_materials()[0]
-        if obj.get_cp("bop_dataset_name") in ['itodd', 'tless']:
-            grey_col = np.random.uniform(0.1, 0.9)   
-            mat.set_principled_shader_value("Base Color", [grey_col, grey_col, grey_col, 1])        
-        mat.set_principled_shader_value("Roughness", np.random.uniform(0, 1.0))
-        mat.set_principled_shader_value("Specular IOR Level", np.random.uniform(0, 1.0))
-        mat.set_principled_shader_value("Metallic", np.random.uniform(0, 0.5))
+    for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):
+        if len(obj.get_materials()) > 0:        
+            mat = obj.get_materials()[0]
+            if obj.get_cp("bop_dataset_name") in ['itodd', 'tless']:
+                grey_col = np.random.uniform(0.1, 0.9)   
+                mat.set_principled_shader_value("Base Color", [grey_col, grey_col, grey_col, 1])        
+            mat.set_principled_shader_value("Roughness", np.random.uniform(0, 1.0))
+            mat.set_principled_shader_value("Specular IOR Level", np.random.uniform(0, 1.0))
+            mat.set_principled_shader_value("Metallic", np.random.uniform(0, 0.5))
         obj.enable_rigidbody(True, mass=1.0, friction = 100.0, linear_damping = 0.99, angular_damping = 0.99)
         obj.hide(False)
     
@@ -201,6 +202,7 @@ for i in range(args.num_scenes):
     # data["depth"][0] = ((data["depth"][0] / 268.0) * uint16_max).astype(np.uint16)
     # print("simon depth_uint8", data["depth"][0].max(), data["depth"][0].min(), data["depth"][0].dtype, data["depth"][0])
 
+
     # Write data in bop formatx
     bproc.writer.write_bop(os.path.join(args.output_dir, 'bop_data'),
                            target_objects = sampled_target_bop_objs,
@@ -210,7 +212,8 @@ for i in range(args.num_scenes):
                            colors = data["colors"], 
                            color_file_format = "JPEG",
                            ignore_dist_thres = 10,
-                           frames_per_chunk=25)
+                           frames_per_chunk=25,
+                           calc_mask_info_coco=False)
     
     for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):      
         obj.disable_rigidbody()

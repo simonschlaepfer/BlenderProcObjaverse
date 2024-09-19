@@ -102,6 +102,20 @@ def load_obj(filepath: str, cached_objects: Optional[Dict[str, List[MeshObject]]
         bpy.ops.import_scene.fbx(filepath=filepath)
     elif filepath.lower().endswith('.glb') or filepath.lower().endswith('.gltf'):
         bpy.ops.import_scene.gltf(filepath=filepath)
+        selected_objects = [obj for obj in bpy.context.selected_objects if obj not in previously_selected_objects]
+        # Combine all objects into a single object
+        if selected_objects:
+            if bpy.context.object.mode != 'OBJECT':
+                bpy.ops.object.mode_set(mode='OBJECT')
+            
+            bpy.ops.object.select_all(action='DESELECT')
+            for obj in selected_objects:
+                if obj.type == 'MESH':
+                    # print("simon selected_objects", selected_objects)
+                    to_join_obj = obj
+                    obj.select_set(True)
+            bpy.context.view_layer.objects.active = to_join_obj
+            bpy.ops.object.join()  
     elif filepath.lower().endswith('.usda') or filepath.lower().endswith('.usd') or filepath.lower().endswith('.usdc'):
         bpy.ops.wm.usd_import(filepath=filepath)
 

@@ -1,6 +1,6 @@
 from blenderproc.python.loader.AMASSLoader import load_AMASS
 from blenderproc.python.loader.BlendLoader import load_blend
-from blenderproc.python.loader.BopLoader import load_bop_objs, load_bop_scene, load_bop_intrinsics
+from blenderproc.python.loader.BopLoader import load_bop_objs, load_bop_scene, load_bop_intrinsics, load_objaverse_objs, init_bop_toolkit
 from blenderproc.python.loader.CCMaterialLoader import load_ccmaterials
 from blenderproc.python.loader.Front3DLoader import load_front3d
 from blenderproc.python.loader.HavenMaterialLoader import load_haven_mat
@@ -15,3 +15,4 @@ from blenderproc.python.loader.SuncgLoader import load_suncg
 from blenderproc.python.loader.TextureLoader import load_texture
 from blenderproc.python.loader.HavenEnvironmentLoader import get_random_world_background_hdr_img_path_from_haven
 from blenderproc.python.loader.URDFLoader import load_urdf
+from blenderproc.python.loader.ObjaverseJson import update_json

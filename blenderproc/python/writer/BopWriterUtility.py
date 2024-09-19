@@ -122,7 +122,7 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
                 starting_frame_id = 0
 
     # Save the data.
-    _BopWriterUtility.write_camera(camera_path, depth_scale=depth_scale)
+    # _BopWriterUtility.write_camera(camera_path, depth_scale=depth_scale)
     assert annotation_unit in ['m', 'dm', 'cm', 'mm'], (f"Invalid annotation unit: `{annotation_unit}`. Supported "
                                                         f"are 'm', 'dm', 'cm', 'mm'")
     annotation_scale = {'m': 1., 'dm': 10., 'cm': 100., 'mm': 1000.}[annotation_unit]

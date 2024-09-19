@@ -36,7 +36,7 @@ def init(clean_up_scene: bool = True):
         bpy.context.preferences.view.language = "en_US"
 
     # Use cycles
-    bpy.context.scene.render.engine = 'CYCLES'
+    bpy.context.scene.render.engine = 'BLENDER_EEVEE_NEXT'
 
     # Set default render devices
     RendererUtility.set_render_devices()

@@ -69,10 +69,10 @@ def load_ccmaterials(folder_path: str = "resources/cctextures", used_assets: lis
                     continue
             current_path = os.path.join(folder_path, asset)
             if os.path.isdir(current_path):
-                base_image_path = os.path.join(current_path, f"{asset}_2K_Color.jpg")
+                base_image_path = os.path.join(current_path, f"{asset}_1K_Color.jpg")
                 # Filenames have been changed  (https://docs.ambientcg.com/updates/2023/08/29/minor-changes-to-the-filename-structure-of-pbr-materials/)
                 if not os.path.exists(base_image_path):
-                    base_image_path = os.path.join(current_path, f"{asset}_2K-JPG_Color.jpg")
+                    base_image_path = os.path.join(current_path, f"{asset}_1K-JPG_Color.jpg")
 
                 if not os.path.exists(base_image_path):
                     continue

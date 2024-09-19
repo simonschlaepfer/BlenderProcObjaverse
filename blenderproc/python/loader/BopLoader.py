@@ -2,18 +2,105 @@
 
 import os
 from random import choice
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Generator
 import warnings
+import math
 
 import bpy
 import numpy as np
+import mathutils
 from mathutils import Matrix, Vector
+import json
+import trimesh
 
 from blenderproc.python.utility.SetupUtility import SetupUtility
 from blenderproc.python.camera import CameraUtility
-from blenderproc.python.types.MeshObjectUtility import MeshObject
+from blenderproc.python.types.MeshObjectUtility import MeshObject, convert_to_meshes
 from blenderproc.python.utility.MathUtility import change_source_coordinate_frame_of_transformation_matrix
 from blenderproc.python.loader.ObjectLoader import load_obj
+
+def convert_glb_to_obj(glb_path: str, norm_scale: Optional[float]):
+    # Load the mesh or collection of meshes
+    trimesh_mesh = trimesh.load(glb_path)
+    # Check if the loaded object is a scene (which can contain multiple geometries)
+    if isinstance(trimesh_mesh, trimesh.Scene):
+        for name, geom in trimesh_mesh.geometry.items():
+            if not isinstance(geom, trimesh.Trimesh):
+                return None
+        merged_mesh = trimesh.util.concatenate(trimesh_mesh.dump())
+    else:
+        # If trimesh_mesh is already a single mesh, no need to concatenate
+        merged_mesh = trimesh_mesh
+
+    if norm_scale is None:
+        # the mesh can be 50% smaller or bigger
+        scale_randomizer = np.random.uniform(0.5, 2.0)
+
+        norm_scale = max(trimesh_mesh.bounding_box.extents) * scale_randomizer
+
+    merged_mesh.apply_scale(1 / norm_scale)
+    merged_mesh.export(glb_path.replace('.glb', '.obj'), include_texture=True, file_type='obj')
+
+    return norm_scale
+
+
+def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, object_model_unit: str = 'm') -> List[MeshObject]:
+    """ Loads all or a subset of 3D models of any BOP dataset
+
+    :param bop_dataset_path: Full path to a specific bop dataset e.g. /home/user/bop/tless.
+    :param model_type: Optionally, specify type of BOP model. Available: [reconst, cad or eval].
+    :param obj_ids: List of object ids to load. Default: [] (load all objects from the given BOP dataset)
+    :param sample_objects: Toggles object sampling from the specified dataset.
+    :param num_of_objs_to_sample: Amount of objects to sample from the specified dataset. If this amount is bigger
+                                  than the dataset actually contains, then all objects will be loaded.
+    :param obj_instances_limit: Limits the amount of object copies when sampling. Default: -1 (no limit).
+    :param mm2m: Specify whether to convert poses and models to meters (deprecated).
+    :param object_model_unit: The unit the object model is in. Object model will be scaled to meters. This does not
+                              affect the annotation units. Available: ['m', 'dm', 'cm', 'mm'].
+    :param move_origin_to_x_y_plane: Move center of the object to the lower side of the object, this will not work
+                                     when used in combination with pose estimation tasks! This is designed for the
+                                     use-case where BOP objects are used as filler objects in the background.
+    :return: The list of loaded mesh objects.
+    """
+
+    assert object_model_unit in ['m', 'dm', 'cm', 'mm'], (f"Invalid object model unit: `{object_model_unit}`. "
+                                                          f"Supported are 'm', 'dm', 'cm', 'mm'")
+    scale = {'m': 1., 'dm': 0.1, 'cm': 0.01, 'mm': 0.001}[object_model_unit]
+
+    bop_dataset_name = "objaverse"
+    loaded_objects = []
+    for object in objects_dict:
+        glb_path = os.path.join(objaverse_base_path, object["github_id"], object['objaverse_id'] + '.glb')
+        obj_id = object["obj_id"]
+        # model_p["model_tpath"] = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/NOM-Diffusion/dataset/ycbv/ycbv_models/models/obj_000001.ply'
+
+        # check if scale_norm is in object dict at obj_id
+        if "norm_scale" in object:
+            norm_scale = object["norm_scale"]
+        else:
+            norm_scale = None
+
+        obj_path = glb_path.replace('.glb', '.obj')
+        if os.path.exists(obj_path) and norm_scale is None:
+            continue
+        if not os.path.exists(obj_path):
+            norm_scale = convert_glb_to_obj(glb_path, norm_scale)
+            if norm_scale is None:
+                print(f"{glb_path} could not be converted to .obj")
+                continue
+            else:
+                objects_dict[obj_id]["norm_scale"] = norm_scale
+        model_p = {}
+        model_p["model_tpath"] = obj_path
+
+        cur_obj = _BopLoader.load_mesh(obj_id, model_p, bop_dataset_name, scale)
+        loaded_objects.append(cur_obj)
+
+    return loaded_objects, objects_dict
+
+def init_bop_toolkit(bop_dataset_path):
+    _BopLoader.setup_bop_toolkit(bop_dataset_path)
+
 
 def load_bop_objs(bop_dataset_path: str, model_type: str = "", obj_ids: Optional[List[int]] = None,
                   sample_objects: bool = False, num_of_objs_to_sample: Optional[int] = None,
@@ -239,6 +326,9 @@ class _BopLoader:
 
         # Install bop_toolkit_lib
         SetupUtility.setup_pip(["git+https://github.com/thodan/bop_toolkit"])
+        SetupUtility.setup_pip(["git+https://github.com/facebookresearch/hand_tracking_toolkit"])
+        SetupUtility.setup_pip(["pyglet < 1.5.28"])
+        SetupUtility.setup_pip(["objaverse"])
         os.environ["BOP_PATH"] = bop_path
 
         return bop_path, bop_dataset_name
@@ -351,10 +441,10 @@ class _BopLoader:
         for obj in objs:
             obj.clear_custom_splitnormals()
             
-        assert (
-            len(objs) == 1
-        ), f"Loading object from '{model_path}' returned more than one mesh"
-        cur_obj = objs[0]
+        # assert (
+        #     len(objs) == 1
+        # ), f"Loading object from '{model_path}' returned more than one mesh"
+        cur_obj = objs[-1]
 
         if duplicated:
             # See issue https://github.com/DLR-RM/BlenderProc/issues/590

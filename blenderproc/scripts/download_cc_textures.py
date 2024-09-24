@@ -1,3 +1,4 @@
+import blenderproc as bproc
 """ Download cc textures from ambientCG.com """
 
 import shutil

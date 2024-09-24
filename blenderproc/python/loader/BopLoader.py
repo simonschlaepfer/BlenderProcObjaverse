@@ -83,7 +83,6 @@ def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, obje
 
         obj_path = glb_path.replace('.glb', '.obj')
         if os.path.exists(obj_path) and norm_scale is None:
-            print("simon here 1")
             continue
         if not os.path.exists(obj_path):
             norm_scale = convert_glb_to_obj(glb_path, norm_scale)
@@ -91,7 +90,6 @@ def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, obje
                 print(f"{glb_path} could not be converted to .obj")
                 continue
             else:
-                print("simon here")
                 objects_dict[obj_id]["norm_scale"] = norm_scale
         model_p = {}
         model_p["model_tpath"] = obj_path

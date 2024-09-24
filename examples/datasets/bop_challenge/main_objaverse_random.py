@@ -15,14 +15,14 @@ parser.add_argument('output_dir', nargs='?', default='', help="Path to where the
 parser.add_argument('--num_scenes', nargs='?', type=int, default=10, help="How many scenes with 25 images each to generate")
 args = parser.parse_args()
 
-args.bop_parent_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/NOM-Diffusion/dataset'
-args.cc_textures_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/textures'
-args.output_dir = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/objaverse_scenes'
+args.bop_parent_path = '/cluster/work/riner/users/simschla/datasets'
+args.cc_textures_path = '/cluster/work/riner/users/simschla/datasets/textures'
+args.output_dir = '/cluster/home/simschla/master_thesis/BlenderProcObjaverse/objaverse_scenes'
 args.num_scenes = 2
-sample_size = 5
-total_num_objects = 8
-objaverse_model_json_path = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/BlenderProcObjaverse/meshes/objaverse_models.json'
-objaverse_base_path = '/Users/simonschlapfer/.objaverse/hf-objaverse-v1/glbs'
+sample_size = 40
+total_num_objects = 50
+objaverse_model_json_path = '/cluster/home/simschla/master_thesis/BlenderProcObjaverse/meshes/objaverse_models.json'
+objaverse_base_path = '/cluster/home/simschla/.objaverse/hf-objaverse-v1/glbs'
 dataset_name = 'objapose'
 image_resolution = (720, 540)
 focal_interval = (500, 3000)
@@ -169,7 +169,7 @@ for i in range(args.num_scenes):
     bop_bvh_tree = bproc.object.create_bvh_tree_multi_objects(sampled_target_bop_objs + sampled_distractor_bop_objs)
 
     cam_poses = 0
-    while cam_poses < 2:
+    while cam_poses < 25:
         # Sample location
         location = bproc.sampler.shell(center = [0, 0, 0],
                                 radius_min = 0.61,
@@ -212,8 +212,7 @@ for i in range(args.num_scenes):
                            colors = data["colors"], 
                            color_file_format = "JPEG",
                            ignore_dist_thres = 10,
-                           frames_per_chunk=25,
-                           calc_mask_info_coco=False)
+                           frames_per_chunk=25)
     
     for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):      
         obj.disable_rigidbody()

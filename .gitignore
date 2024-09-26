@@ -34,3 +34,4 @@ blenderproc_resources/
 textures/
 objaverse_scenes/
 .DS_Store
+slurm*

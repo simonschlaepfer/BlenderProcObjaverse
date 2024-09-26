@@ -7,26 +7,34 @@ import multiprocessing
 import math
 import json
 from blenderproc.python.camera import CameraUtility
+import logging
 
 parser = argparse.ArgumentParser()
-parser.add_argument('bop_parent_path', nargs='?', default='', help="Path to the bop datasets parent directory")
-parser.add_argument('cc_textures_path', nargs='?', default="resources/cctextures", help="Path to downloaded cc textures")
-parser.add_argument('output_dir', nargs='?', default='', help="Path to where the final files will be saved ")
-parser.add_argument('--num_scenes', nargs='?', type=int, default=10, help="How many scenes with 25 images each to generate")
+parser.add_argument('--num_scenes_per_node', nargs='?', type=int, default=25, help="How many scenes with 25 images each to generate")
+parser.add_argument('--start_scene_id', nargs='?', type=int, default=0, help="Start scene id")
+parser.add_argument('--seed', nargs='?', type=int, default=42, help="Seed for random number generator")
+parser.add_argument('--total_num_objects', nargs='?', type=int, default=500, help="Total number of objects which are loaded")
 args = parser.parse_args()
 
-args.bop_parent_path = '/cluster/work/riner/users/simschla/datasets'
-args.cc_textures_path = '/cluster/work/riner/users/simschla/datasets/textures'
-objaverse_base_path = '/cluster/work/riner/users/simschla/datasets/objapose_base/objaverse'
-objaverse_model_json_path = os.path.join(objaverse_base_path, 'objaverse_models.json')
-args.output_dir = os.path.join(objaverse_base_path, 'objaverse_scenes')
-args.num_scenes = 2
-sample_size = 4
-total_num_objects = 50
-dataset_name = 'objapose'
+bop_parent_path = '/cluster/work/riner/users/simschla/datasets'
+objaverse_base_path = '/cluster/work/riner/users/simschla/datasets/objapose_base'
+cc_textures_path = os.path.join(objaverse_base_path, 'cc_textures')
+objaverse_model_json_path = os.path.join(objaverse_base_path, 'objaverse', 'objaverse_models.json')
+output_dir = '/cluster/scratch/simschla/objapose'
+sample_size = 40
+dataset_name = 'objapose_scenes'
+imwise_output_name = 'objapose_imwise'
+num_cam_poses = 25
 image_resolution = (720, 540)
 focal_interval = (500, 3000)
 diff_focal_interval = (1, 50)
+
+logging_file = os.path.join(output_dir, 'objaverse_render.log')
+logging.basicConfig(filename=logging_file, level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
+
+random.seed(args.seed)
+np.random.seed(args.seed)
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 
@@ -34,38 +42,18 @@ bproc.init()
 
 # bproc.loader.load_bop_intrinsics(bop_dataset_path = os.path.join(args.bop_parent_path, 'ycbv'))
 
-bproc.loader.init_bop_toolkit(bop_dataset_path=os.path.join(args.bop_parent_path, dataset_name))
+bproc.loader.init_bop_toolkit(bop_dataset_path=os.path.join(bop_parent_path, dataset_name))
 
-# load bop objects into the scene
-import objaverse
-processes = multiprocessing.cpu_count()
-random.seed(42)
-np.random.seed(42)
-uids = objaverse.load_uids()
-random_object_uids = random.sample(uids, total_num_objects)
-objects = objaverse.load_objects(
-    uids=random_object_uids,
-    download_processes=1
-)
-objects_dict = objaverse.load_objects(uids=random_object_uids)
+objaverse_dict_complete = json.load(open(objaverse_model_json_path))
 
-objaverse_dict = bproc.loader.update_json(objects_dict, objaverse_model_json_path)
+objaverse_dict_selected = random.sample(objaverse_dict_complete, args.total_num_objects)
 
-target_bop_objs, objaverse_dict = bproc.loader.load_objaverse_objs(objaverse_dict, objaverse_base_path, object_model_unit='dm')
-
-# save objaverse_dict at objaverse_model_json_path
-with open(objaverse_model_json_path, 'w') as file:
-    json.dump(objaverse_dict, file, indent=4)
-
-# load distractor bop objects
-tless_dist_bop_objs = [] # bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(args.bop_parent_path, 'tless'), model_type = 'cad', mm2m = True)
-hb_dist_bop_objs = [] # bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(args.bop_parent_path, 'hb'), mm2m = True)
-tyol_dist_bop_objs = [] # bproc.loader.load_bop_objs(bop_dataset_path = os.path.join(args.bop_parent_path, 'tyol'), mm2m = True)
+target_bop_objs, objaverse_dict = bproc.loader.load_objaverse_objs(objaverse_dict_selected, objaverse_base_path, object_model_unit='dm')
 
 print("Objects loaded into Blender")
 
 # set shading and hide objects
-for obj in (target_bop_objs + tless_dist_bop_objs + hb_dist_bop_objs + tyol_dist_bop_objs):
+for obj in target_bop_objs:
     obj.set_shading_mode('auto')
     obj.hide(True)
 
@@ -91,7 +79,8 @@ light_point.set_energy(200)
 
 print("Load Textures")
 # load cc_textures
-cc_textures = bproc.loader.load_ccmaterials(args.cc_textures_path)
+# cc_textures = bproc.loader.load_ccmaterials(args.cc_textures_path)
+cc_textures_names = [name for name in os.listdir(cc_textures_path)]
 
 print("Setup pose sampler and depth renderer")
 # Define a function that samples 6-DoF poses
@@ -107,7 +96,7 @@ bproc.renderer.set_max_amount_of_samples(50)
 
 print("Blender scene setup finished")
 
-for i in range(args.num_scenes):
+for i in range(args.num_scenes_per_node):
     # setup camera with random intrinsics
     # create random camera intrinsics as np array
     fx = np.random.uniform(*focal_interval)
@@ -126,13 +115,10 @@ for i in range(args.num_scenes):
 
     # Sample bop objects for a scene
     sampled_target_bop_objs = list(np.random.choice(target_bop_objs, size=sample_size, replace=False))
-    sampled_distractor_bop_objs = list(np.random.choice(tless_dist_bop_objs, size=0, replace=False))
-    sampled_distractor_bop_objs += list(np.random.choice(hb_dist_bop_objs, size=0, replace=False))
-    sampled_distractor_bop_objs += list(np.random.choice(tyol_dist_bop_objs, size=0, replace=False))
 
 
     # Randomize materials and set physics
-    for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):
+    for obj in sampled_target_bop_objs:
         if len(obj.get_materials()) > 0:        
             mat = obj.get_materials()[0]
             if obj.get_cp("bop_dataset_name") in ['itodd', 'tless']:
@@ -154,13 +140,26 @@ for i in range(args.num_scenes):
     light_point.set_location(location)
 
     # sample CC Texture and assign to room planes
-    random_cc_texture = np.random.choice(cc_textures)
+    random_cc_texture = None
+
+    # Keep looping until a valid texture is loaded
+    while random_cc_texture is None:
+        # Randomly select a texture name
+        random_cc_texture_name = np.random.choice(cc_textures_names)        
+        # Try to load the texture
+        loaded_textures = bproc.loader.load_ccmaterials(cc_textures_path, used_assets=[random_cc_texture_name])
+        # Check if a texture was successfully loaded
+        if loaded_textures:
+            random_cc_texture = loaded_textures[0]
+        else:
+            print(f"Failed to load texture {random_cc_texture_name}, trying again...")
+
     for plane in room_planes:
         plane.replace_materials(random_cc_texture)
 
 
     # Sample object poses and check collisions 
-    bproc.object.sample_poses(objects_to_sample = sampled_target_bop_objs + sampled_distractor_bop_objs,
+    bproc.object.sample_poses(objects_to_sample = sampled_target_bop_objs,
                             sample_pose_func = sample_pose_func, 
                             max_tries = 1000)
             
@@ -172,10 +171,10 @@ for i in range(args.num_scenes):
                                                     solver_iters=25)
 
     # BVH tree used for camera obstacle checks
-    bop_bvh_tree = bproc.object.create_bvh_tree_multi_objects(sampled_target_bop_objs + sampled_distractor_bop_objs)
+    bop_bvh_tree = bproc.object.create_bvh_tree_multi_objects(sampled_target_bop_objs)
 
     cam_poses = 0
-    while cam_poses < 25:
+    while cam_poses < num_cam_poses:
         # Sample location
         location = bproc.sampler.shell(center = [0, 0, 0],
                                 radius_min = 0.61,
@@ -208,9 +207,12 @@ for i in range(args.num_scenes):
     # data["depth"][0] = ((data["depth"][0] / 268.0) * uint16_max).astype(np.uint16)
     # print("simon depth_uint8", data["depth"][0].max(), data["depth"][0].min(), data["depth"][0].dtype, data["depth"][0])
 
+    first_scene_id = args.start_scene_id * args.num_scenes_per_node + i
+    last_scene_id = first_scene_id + i + 1
+
     print("BOP writer started")
     # Write data in bop formatx
-    bproc.writer.write_bop(os.path.join(args.output_dir, 'bop_data'),
+    bproc.writer.write_bop(output_dir,
                            target_objects = sampled_target_bop_objs,
                            dataset = dataset_name,
                            depth_scale = 0.1,
@@ -218,10 +220,18 @@ for i in range(args.num_scenes):
                            colors = data["colors"], 
                            color_file_format = "JPEG",
                            ignore_dist_thres = 10,
-                           frames_per_chunk=25)
+                           frames_per_chunk = num_cam_poses,
+                           num_worker = 12,
+                           first_scene_id = first_scene_id,
+                           last_scene_id = last_scene_id,
+                           imwise_output_name = imwise_output_name)
     
-    for obj in (sampled_target_bop_objs + sampled_distractor_bop_objs):      
+    for obj in sampled_target_bop_objs:      
         obj.disable_rigidbody()
         obj.hide(True)
 
+    logging.info(f"Scene {first_scene_id} of job {args.start_scene_id} rendering finished.")
+
     print("Scene finished")
+
+logging.info(f"Job {args.start_scene_id} rendering finished.")

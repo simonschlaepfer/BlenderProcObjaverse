@@ -16,6 +16,8 @@ import cv2
 import bpy
 from mathutils import Matrix
 import sys
+import shutil
+from pathlib import Path
 
 from blenderproc.python.types.MeshObjectUtility import MeshObject, get_all_mesh_objects
 from blenderproc.python.writer.WriterUtility import _WriterUtility
@@ -25,7 +27,8 @@ from blenderproc.python.utility.MathUtility import change_target_coordinate_fram
 
 # EGL is not available under windows
 if sys.platform in ["linux", "linux2"]:
-    os.environ['PYOPENGL_PLATFORM'] = 'egl'
+    os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+    # os.environ['PYOPENGL_PLATFORM'] = 'egl'
 
 
 def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None,
@@ -34,7 +37,7 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
               depth_scale: float = 1.0, jpg_quality: int = 95, save_world2cam: bool = True,
               ignore_dist_thres: float = 100., m2mm: Optional[bool] = None, annotation_unit: str = 'mm',
               frames_per_chunk: int = 1000, calc_mask_info_coco: bool = True, delta: float = 0.015,
-              num_worker: Optional[int] = None):
+              num_worker: Optional[int] = None, first_scene_id: int = 0, last_scene_id: int = 100, imwise_output_name: str = ''):
     """Write the BOP data
 
     :param output_dir: Path to the output directory.
@@ -64,13 +67,13 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
 
     # Output paths.
     dataset_dir = os.path.join(output_dir, dataset)
-    chunks_dir = os.path.join(dataset_dir, 'train_pbr')
-    camera_path = os.path.join(dataset_dir, 'camera.json')
+    chunks_dir = dataset_dir
+    # camera_path = os.path.join(dataset_dir, 'camera.json')
 
     # Create the output directory structure.
     if not os.path.exists(dataset_dir):
-        os.makedirs(dataset_dir)
-        os.makedirs(chunks_dir)
+        os.makedirs(dataset_dir, exist_ok=True)
+        os.makedirs(chunks_dir, exist_ok=True)
     elif not append_to_existing_output:
         raise FileExistsError(f"The output folder already exists: {dataset_dir}")
 
@@ -104,10 +107,10 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
         # If one (or multiple) more chunk dirs are created to save the rendered frames to,
         # mask/info/coco annotations need to be calculated for all of them
         chunk_dirs = sorted(glob.glob(os.path.join(chunks_dir, '*')))
-        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d)]
+        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d) and int(d.split('/')[-1]) >= first_scene_id and int(d.split('/')[-1]) < last_scene_id]
         last_chunk_dir = sorted(chunk_dirs)[-1] if chunk_dirs else None
 
-        starting_chunk_id = 0
+        starting_chunk_id = first_scene_id
         starting_frame_id = 0
         if last_chunk_dir:
             last_chunk_gt_fpath = os.path.join(last_chunk_dir, 'scene_gt.json')
@@ -132,11 +135,11 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
     _BopWriterUtility.write_frames(chunks_dir, dataset_objects=dataset_objects, depths=depths, colors=colors,
                                    color_file_format=color_file_format, frames_per_chunk=frames_per_chunk,
                                    annotation_scale=annotation_scale, ignore_dist_thres=ignore_dist_thres,
-                                   save_world2cam=save_world2cam, depth_scale=depth_scale, jpg_quality=jpg_quality)
+                                   save_world2cam=save_world2cam, depth_scale=depth_scale, jpg_quality=jpg_quality, first_scene_id=first_scene_id, last_scene_id=last_scene_id)
 
     if calc_mask_info_coco:
         # Set up the bop toolkit
-        SetupUtility.setup_pip(["git+https://github.com/thodan/bop_toolkit", "PyOpenGL==3.1.0"])
+        SetupUtility.setup_pip(["git+https://github.com/thodan/bop_toolkit", "PyOpenGL==3.1.5"])
 
         # determine which objects to add to the vsipy renderer
         # for numpy>=1.20, np.float is deprecated: https://numpy.org/doc/stable/release/1.20.0-notes.html#deprecations
@@ -144,9 +147,9 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
 
         # Determine for which directories mask_info_coco has to be calculated
         chunk_dirs = sorted(glob.glob(os.path.join(chunks_dir, '*')))
-        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d)]
-        chunk_dir_ids = [d.split('/')[-1] for d in chunk_dirs]
-        chunk_dirs = chunk_dirs[chunk_dir_ids.index(f"{starting_chunk_id:06d}"):]
+        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d) and int(d.split('/')[-1]) >= first_scene_id and int(d.split('/')[-1]) < last_scene_id]
+        # chunk_dir_ids = [d.split('/')[-1] for d in chunk_dirs]
+        # chunk_dirs = chunk_dirs[chunk_dir_ids.index(f"{starting_chunk_id:06d}"):]
 
         # convert all objects to trimesh objects
         trimesh_objects = {}
@@ -183,6 +186,16 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
         pool.close()
         pool.join()
 
+    # convert scenewise storage format to imagewise
+    print("Convert to Imagewise Format")
+    from bop_toolkit_lib.dataset.convert_scenewise_to_imagewise import convert_scene_to_imagewise
+    imwise_output_dir = os.path.join(output_dir, imwise_output_name)
+    os.makedirs(imwise_output_dir, exist_ok=True)
+    for scene_directory in chunk_dirs:
+        scene_id = int(scene_directory.split('/')[-1])
+        image_tkeys = f"{scene_id:06d}_" + "{image_id:06d}"
+        convert_scene_to_imagewise(Path(scene_directory), Path(imwise_output_dir), image_tkeys)
+        shutil.rmtree(scene_directory)
 
 
 def bop_pose_to_pyrender_coordinate_system(cam_R_m2c: np.ndarray, cam_t_m2c: np.ndarray) -> np.ndarray:
@@ -392,7 +405,7 @@ class _BopWriterUtility:
     def write_frames(chunks_dir: str, dataset_objects: list, depths: List[np.ndarray],
                      colors: List[np.ndarray], color_file_format: str = "PNG",
                      depth_scale: float = 1.0, frames_per_chunk: int = 1000, annotation_scale: float = 1000.,
-                     ignore_dist_thres: float = 100., save_world2cam: bool = True, jpg_quality: int = 95):
+                     ignore_dist_thres: float = 100., save_world2cam: bool = True, jpg_quality: int = 95, first_scene_id: int = 0, last_scene_id: int = 100):
         """Write each frame's ground truth into chunk directory in BOP format
 
         :param chunks_dir: Path to the output directory of the current chunk.
@@ -422,10 +435,10 @@ class _BopWriterUtility:
         # Paths to the already existing chunk folders (such folders may exist
         # when appending to an existing dataset).
         chunk_dirs = sorted(glob.glob(os.path.join(chunks_dir, '*')))
-        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d)]
+        chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d) and int(d.split('/')[-1]) >= first_scene_id and int(d.split('/')[-1]) < last_scene_id]
 
         # Get ID's of the last already existing chunk and frame.
-        curr_chunk_id = 0
+        curr_chunk_id = first_scene_id
         curr_frame_id = 0
         if len(chunk_dirs):
             last_chunk_dir = sorted(chunk_dirs)[-1]

@@ -19,7 +19,7 @@ from blenderproc.python.types.MeshObjectUtility import MeshObject, convert_to_me
 from blenderproc.python.utility.MathUtility import change_source_coordinate_frame_of_transformation_matrix
 from blenderproc.python.loader.ObjectLoader import load_obj
 
-def convert_glb_to_obj(glb_path: str, norm_scale: Optional[float]):
+def convert_glb_to_obj(glb_path: str, obj_path: str, norm_scale: Optional[float]):
     # Load the mesh or collection of meshes
     trimesh_mesh = trimesh.load(glb_path)
     # Check if the loaded object is a scene (which can contain multiple geometries)
@@ -40,7 +40,7 @@ def convert_glb_to_obj(glb_path: str, norm_scale: Optional[float]):
         norm_scale = max(trimesh_mesh.bounding_box.extents) * scale_randomizer
 
     merged_mesh.apply_scale(1 / norm_scale)
-    merged_mesh.export(glb_path.replace('.glb', '.obj'), include_texture=True, file_type='obj')
+    merged_mesh.export(obj_path, include_texture=True, file_type='obj')
 
     return norm_scale
 
@@ -71,29 +71,10 @@ def load_objaverse_objs(objects_dict: List[dict], objaverse_base_path: str, obje
     bop_dataset_name = "objaverse"
     loaded_objects = []
     for object in objects_dict:
-        glb_path = os.path.join(objaverse_base_path, object["github_id"], object['objaverse_id'] + '.glb')
         obj_id = object["obj_id"]
-        # model_p["model_tpath"] = '/Users/simonschlapfer/Documents/ETH/Master/MasterThesis/Code/NOM-Diffusion/dataset/ycbv/ycbv_models/models/obj_000001.ply'
-
-        # check if scale_norm is in object dict at obj_id
-        if "norm_scale" in object:
-            norm_scale = object["norm_scale"]
-        else:
-            norm_scale = None
-
-        obj_path = glb_path.replace('.glb', '.obj')
-        if os.path.exists(obj_path) and norm_scale is None:
-            continue
-        if not os.path.exists(obj_path):
-            norm_scale = convert_glb_to_obj(glb_path, norm_scale)
-            if norm_scale is None:
-                print(f"{glb_path} could not be converted to .obj")
-                continue
-            else:
-                objects_dict[obj_id]["norm_scale"] = norm_scale
+        obj_path = os.path.join(objaverse_base_path, "objaverse", "objs", object["github_id"], object['objaverse_id'], 'model_scaled.obj')
         model_p = {}
         model_p["model_tpath"] = obj_path
-
         cur_obj = _BopLoader.load_mesh(obj_id, model_p, bop_dataset_name, scale)
         loaded_objects.append(cur_obj)
 
@@ -326,10 +307,13 @@ class _BopLoader:
             raise FileNotFoundError(f"It seems the BOP dataset does not exist under the given path {bop_dataset_path}")
 
         # Install bop_toolkit_lib
-        SetupUtility.setup_pip(["git+https://github.com/thodan/bop_toolkit"])
+        SetupUtility.setup_pip(["git+https://github.com/thodan/bop_toolkit", "PyOpenGL==3.1.5"])
         SetupUtility.setup_pip(["git+https://github.com/facebookresearch/hand_tracking_toolkit"])
         SetupUtility.setup_pip(["pyglet < 1.5.28"])
         SetupUtility.setup_pip(["objaverse"])
+        SetupUtility.setup_pip(["future"])
+        SetupUtility.setup_pip(["pyopengl==3.1.5"])
+        # SetupUtility.setup_pip(["git+https://github.com/mmatl/pyglet.git"])
         os.environ["BOP_PATH"] = bop_path
 
         return bop_path, bop_dataset_name

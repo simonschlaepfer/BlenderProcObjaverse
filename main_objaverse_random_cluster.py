@@ -38,6 +38,8 @@ np.random.seed(args.seed)
 
 os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 
+print("Starting rendering job for start scene ", args.start_scene_id)
+
 bproc.init()
 
 # bproc.loader.load_bop_intrinsics(bop_dataset_path = os.path.join(args.bop_parent_path, 'ycbv'))
@@ -208,7 +210,7 @@ for i in range(args.num_scenes_per_node):
     # print("simon depth_uint8", data["depth"][0].max(), data["depth"][0].min(), data["depth"][0].dtype, data["depth"][0])
 
     first_scene_id = args.start_scene_id * args.num_scenes_per_node + i
-    last_scene_id = first_scene_id + i + 1
+    last_scene_id = first_scene_id + 1
 
     print("BOP writer started")
     # Write data in bop formatx
@@ -221,7 +223,7 @@ for i in range(args.num_scenes_per_node):
                            color_file_format = "JPEG",
                            ignore_dist_thres = 10,
                            frames_per_chunk = num_cam_poses,
-                           num_worker = 12,
+                           num_worker = 6,
                            first_scene_id = first_scene_id,
                            last_scene_id = last_scene_id,
                            imwise_output_name = imwise_output_name)
@@ -230,8 +232,9 @@ for i in range(args.num_scenes_per_node):
         obj.disable_rigidbody()
         obj.hide(True)
 
-    logging.info(f"Scene {first_scene_id} of job {args.start_scene_id} rendering finished.")
+    logging.info(f"Scene {first_scene_id} of job {args.start_scene_id} rendering finished for scene.")
 
-    print("Scene finished")
+    print(f"Scene {first_scene_id} of job {args.start_scene_id} rendering finished for scene.")
 
-logging.info(f"Job {args.start_scene_id} rendering finished.")
+print(f"Job {args.start_scene_id} rendering finished completely.")
+logging.info(f"Job {args.start_scene_id} rendering finished completely.")

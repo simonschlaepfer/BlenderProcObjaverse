@@ -124,6 +124,31 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
                 starting_chunk_id += 1
                 starting_frame_id = 0
 
+        # convert all objects to trimesh objects
+        trimesh_objects = {}
+        blender_objects = []
+        for idx, obj in enumerate(dataset_objects):
+            if obj.get_cp('category_id') in trimesh_objects:
+                print('WARNING: object already exists as trimesh.')
+                continue
+            if isinstance(obj, Link):
+                if not obj.visuals:
+                    print('WARNING: object has no visuals')
+                    continue
+                if len(obj.visuals) > 1:
+                    print('WARNING: BOP Writer only supports saving annotations of one visual mesh per Link')
+                    warnings.warn('BOP Writer only supports saving annotations of one visual mesh per Link')
+            trimesh_obj = obj.mesh_as_trimesh()
+            # here we also add the scale factor of the objects. the position of the pyrender camera will change based
+            # on the initial scale factor of the objects and the saved annotation format
+            if not np.all(np.isclose(np.array(obj.blender_obj.scale), obj.blender_obj.scale[0])):
+                print("WARNING: the scale is not the same across all dimensions, writing bop_toolkit annotations with "
+                      "the bop writer will fail!")
+            trimesh_objects[obj.get_cp('category_id')] = trimesh_obj
+            blender_objects.append(obj)
+
+        dataset_objects = blender_objects
+
     # Save the data.
     # _BopWriterUtility.write_camera(camera_path, depth_scale=depth_scale)
     assert annotation_unit in ['m', 'dm', 'cm', 'mm'], (f"Invalid annotation unit: `{annotation_unit}`. Supported "
@@ -150,24 +175,6 @@ def write_bop(output_dir: str, target_objects: Optional[List[MeshObject]] = None
         chunk_dirs = [d for d in chunk_dirs if os.path.isdir(d) and int(d.split('/')[-1]) >= first_scene_id and int(d.split('/')[-1]) < last_scene_id]
         # chunk_dir_ids = [d.split('/')[-1] for d in chunk_dirs]
         # chunk_dirs = chunk_dirs[chunk_dir_ids.index(f"{starting_chunk_id:06d}"):]
-
-        # convert all objects to trimesh objects
-        trimesh_objects = {}
-        for obj in dataset_objects:
-            if obj.get_cp('category_id') in trimesh_objects:
-                continue
-            if isinstance(obj, Link):
-                if not obj.visuals:
-                    continue
-                if len(obj.visuals) > 1:
-                    warnings.warn('BOP Writer only supports saving annotations of one visual mesh per Link')
-            trimesh_obj = obj.mesh_as_trimesh()
-            # here we also add the scale factor of the objects. the position of the pyrender camera will change based
-            # on the initial scale factor of the objects and the saved annotation format
-            if not np.all(np.isclose(np.array(obj.blender_obj.scale), obj.blender_obj.scale[0])):
-                print("WARNING: the scale is not the same across all dimensions, writing bop_toolkit annotations with "
-                      "the bop writer will fail!")
-            trimesh_objects[obj.get_cp('category_id')] = trimesh_obj
 
         # Create pool and init each worker
         width = bpy.context.scene.render.resolution_x
@@ -602,7 +609,10 @@ class _BopWriterUtility:
 
         pose = bop_pose_to_pyrender_coordinate_system(cam_R_m2c=np.array(gt['cam_R_m2c']).reshape(3, 3),
                                                         cam_t_m2c=t)
-        scene.add(dataset_objects[gt['obj_id']], pose=pose)
+        try:    
+            scene.add(dataset_objects[gt['obj_id']], pose=pose)
+        except:
+            print("simon debug dataset_objects", gt['obj_id'], dataset_objects)
 
         # Render the depth image.
         _, depth_gt = renderer.render(scene=scene)

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Loop from 0 to 9
-for i in {101..162}; do
+for i in {0..159}; do
     # Format github_id to have 3 digits with leading zeros
     shard_id=$(printf "%03d" $i)
     # Submit sbatch job

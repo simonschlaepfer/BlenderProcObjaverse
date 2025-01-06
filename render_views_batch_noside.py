@@ -24,25 +24,37 @@ def camera_poses(obj, nocs, focal_lenghts, resolution):
     bbox = obj[0].get_bound_box()
     poi = bbox.mean(axis=0)
     radius_bbox = np.linalg.norm(bbox, axis=1).max()  # Maximum bounding box radius
-    fixed_radius = radius_bbox * 2  # Scale the radius if needed for consistent framing
+    fov_x, fov_y = calculate_fov(focal_lenghts, resolution)
+    fixed_radius = radius_bbox / np.tan(min(fov_x, fov_y) / 2)
 
     # Define camera locations on a sphere around the object
-    top_z_multiplier = 1.25  # Adjust this multiplier for a steeper top-down view
+    top_z_multiplier = 1.0  # Adjust this multiplier for a steeper top-down view
     camera_positions = {
-        "front": [fixed_radius, 0, poi[2]],
-        "right": [0, fixed_radius, poi[2]],
-        "back": [-fixed_radius, 0, poi[2]],
-        "left": [0, -fixed_radius, poi[2]],
-        "bottom": [0, 0, -fixed_radius],
-        "top_0": [fixed_radius / np.sqrt(2), 0, fixed_radius * top_z_multiplier],
-        "top_1": [-fixed_radius / 2, fixed_radius * np.sqrt(3) / 2, fixed_radius * top_z_multiplier],
-        "top_2": [-fixed_radius / 2, -fixed_radius * np.sqrt(3) / 2, fixed_radius * top_z_multiplier],
+        "top_0": [fixed_radius / np.sqrt(2), 0, (fixed_radius * top_z_multiplier)-poi[2]],
+        "top_1": [0, fixed_radius / np.sqrt(2), (fixed_radius * top_z_multiplier)-poi[2]],
+        "top_2": [- fixed_radius / np.sqrt(2), 0, (fixed_radius * top_z_multiplier)-poi[2]], 
+        "top_3": [0, -fixed_radius / np.sqrt(2), (fixed_radius * top_z_multiplier)-poi[2]],   
+        "bottom_0": [fixed_radius / np.sqrt(3), fixed_radius / np.sqrt(3), (- fixed_radius * top_z_multiplier)+2*poi[2]],
+        "bottom_1": [-fixed_radius / np.sqrt(3), fixed_radius / np.sqrt(3), (- fixed_radius * top_z_multiplier)+2*poi[2]],
+        "bottom_2": [fixed_radius / np.sqrt(3), -fixed_radius / np.sqrt(3), (- fixed_radius * top_z_multiplier)+2*poi[2]], 
+        "bottom_3": [-fixed_radius / np.sqrt(3), -fixed_radius / np.sqrt(3), (- fixed_radius * top_z_multiplier)+2*poi[2]],      
     }
+    # camera_positions = {
+    #     "top_0": (bbox[2]+bbox[3])/2,
+    #     "top_1": (bbox[3]+bbox[7])/2,
+    #     "top_2": (bbox[7]+bbox[6])/2,
+    #     "top_3": (bbox[6]+bbox[2])/2,
+    #     "bottom_0": bbox[0],
+    #     "bottom_1": bbox[1],
+    #     "bottom_2": bbox[4],
+    #     "bottom_3": bbox[5],  
+    # }
 
     if not nocs:
         light_point = bproc.types.Light()
         light_point.set_type("POINT")
-        light_point.set_energy(100)
+        light_point.set_energy(200)
+        light_point.set_radius(1.0)
         light_point.set_color(np.array([1, 1, 1]))
 
         # Add sunlight for global directional lighting
@@ -51,7 +63,7 @@ def camera_poses(obj, nocs, focal_lenghts, resolution):
         # sunlight.set_energy(2)  # Energy for the sun light
         # sunlight.set_color(np.array([1, 1, 1]))
 
-    locations = ["left", "front", "right", "back", "bottom", "top_0", "top_1", "top_2"]
+    locations = ["top_0", "top_1", "top_2", "top_3", "bottom_0", "bottom_1", "bottom_2", "bottom_3"]
 
     for idx, location in enumerate(locations):
         cam_pos = camera_positions[location]
@@ -180,23 +192,21 @@ def render_loop(base_path, github_id):
     bproc.init()
 
     source_base_path_nocs = os.path.join(base_path, "objaverse", "nocs")
-    target_base_path_nocs = os.path.join(base_path, "objaverse_views", "nocs")
+    target_base_path_nocs = os.path.join(base_path, "objaverse_views_noside", "nocs")
 
     source_base_path_rgb = os.path.join(base_path, "objaverse", "objs")
-    target_base_path_rgb = os.path.join(base_path, "objaverse_views", "rgb")
+    target_base_path_rgb = os.path.join(base_path, "objaverse_views_noside", "rgb")
 
     # create a log file txt, if already exists append to it
     log_path = os.path.join(base_path, "logs", "rendering_log.txt")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
 
-    for objaverse_id in tqdm(sorted(os.listdir(os.path.join(source_base_path_rgb, github_id))), desc="objaverse_ids"):
-        if not os.path.exists(os.path.join(source_base_path_rgb, github_id, objaverse_id, f"model_scaled.obj")):
-            continue
-        obj_source_path_nocs = os.path.join(source_base_path_nocs, github_id, objaverse_id, f"model_scaled_nocs.ply")
-        target_path_nocs = os.path.join(target_base_path_nocs, github_id, objaverse_id)
-        if os.path.exists(os.path.join(target_path_nocs, "7.png")):
-           continue
-        renderering(obj_source_path_nocs, target_path_nocs)
+    for objaverse_id in tqdm(sorted(os.listdir(os.path.join(source_base_path_nocs, github_id))), desc="objaverse_ids"):
+        # obj_source_path_nocs = os.path.join(source_base_path_nocs, github_id, objaverse_id, f"model_scaled_nocs.ply")
+        # target_path_nocs = os.path.join(target_base_path_nocs, github_id, objaverse_id)
+        # if os.path.exists(os.path.join(target_path_nocs, "7.png")):
+        #    continue
+        # renderering(obj_source_path_nocs, target_path_nocs)
 
         obj_source_path_rgb = os.path.join(source_base_path_rgb, github_id, objaverse_id, f"model_scaled.obj")
         target_path_rgb = os.path.join(target_base_path_rgb, github_id, objaverse_id)
@@ -209,7 +219,7 @@ def render_loop(base_path, github_id):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--github_id', type=int, default=100)
+    parser.add_argument('--github_id', type=int, default=85)
     args = parser.parse_args()
 
     base_path = "/cluster/work/riner/users/simschla/datasets/objapose_base"
